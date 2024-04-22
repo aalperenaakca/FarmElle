@@ -1,0 +1,240 @@
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>FarmElle</title>
+                <link href="css/styles.css" rel="stylesheet">
+		
+	</head>
+	<body>
+                <script type="importmap">
+                    {
+                        "imports": {
+                            "three": "./js/three.js-master/build/three.module.js",
+                            "three/addons/": "./js/three.js-master/examples/jsm/"
+                        }
+                    }
+                </script>
+                <script type="module" src="js/MV.js"></script>
+                <script type="module" src="js/controls/menuControls.js"></script>
+                <script type="module" src="js/controls/movementControls.js"></script>
+                <script type="module" src="js/loadObjects.js"></script>
+                <script type="module" src="js/characterMovement.js"></script>
+                <script type="module" src="js/lightingAndCamera.js"></script>
+		<script type="module" src="js/main.js"></script>
+                
+                
+                <script id="vertexShader" type="x-shader/x-vertex">
+                out vec3 v_position;
+                out vec3 v_normal;
+                out vec2 v_texCoord;
+                out vec3 v_surfaceToLight;
+                uniform vec3 spotLightPosition; 
+
+                void main() {
+                    // Save the varyings
+                    v_position = position;
+                    v_normal = normalize((transpose(inverse(modelMatrix)) * vec4(normal, 1.0)).xyz);
+                    v_texCoord = uv; 
+                    
+                    vec3 pos = (modelMatrix * vec4(position, 1.0)).xyz;
+
+                    v_surfaceToLight = spotLightPosition - pos;
+
+                    // Vertex shader output
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+              </script>
+              <script id="fragmentShader" type="x-shader/x-fragment">
+                uniform sampler2D u_texture; // Added for texture
+
+                // Common varyings
+                in vec3 v_position;
+                in vec3 v_normal;
+                in vec2 v_texCoord; 
+                
+                in vec3 v_surfaceToLight;
+
+                uniform vec3 light1_position;
+                uniform vec3 light1_color;
+                uniform float light1_intensity;
+                
+                uniform vec3 u_lightDirection;
+                uniform float spotLightSwitch;
+                
+                /*
+                 * Calculates the diffuse factor produced by the light illumination
+                 */
+                float diffuseFactor(vec3 normal, vec3 light_direction) {
+                    float df = dot(normalize(normal), light_direction);
+
+                    return max(0.0, df);
+                }
+
+                /*
+                 * The main program
+                 */
+                void main() {
+
+                    vec3 light_direction1 = normalize(light1_position - v_position);
+                    float df1 = diffuseFactor(v_normal, light_direction1);
+                    vec3 surfaceToLightDirection = normalize(v_surfaceToLight);
+                    float df2 = 0.0;
+                    float dotFromDirection = dot(surfaceToLightDirection,-u_lightDirection);
+                    if (dotFromDirection >= 0.9) {
+                        df2 = (dot(v_normal, surfaceToLightDirection)+0.3)*spotLightSwitch;
+                      }
+                     
+                    float totalDiffuse = df1;
+
+                    // Sample texture
+                    vec3 textureColor = texture2D(u_texture, v_texCoord).xyz;
+
+                    // Define the toon shading steps based on the total diffuse
+                    
+                    float step;
+                    if (totalDiffuse > 0.95)
+                        step = 0.8;
+                    else if (totalDiffuse > 0.66)
+                        step = 0.66;
+                    else if (totalDiffuse > 0.33)
+                        step = 0.33;
+                    else
+                        step = 0.05;
+                    
+                    step += df2;
+                    vec3 surface_color = step * textureColor * light1_intensity;
+
+                    // Fragment shader output
+                    gl_FragColor = vec4(surface_color, 1.0);
+                    #include <colorspace_fragment>
+                }
+            </script>
+
+            <script id="vertexShaderPhong" type="x-shader/x-vertex">
+                out vec3 v_position;
+                out vec3 v_normal;
+                out vec2 v_texCoord;
+                out vec3 v_surfaceToLight;
+                uniform vec3 spotLightPosition;
+
+                void main() {
+
+                    v_position = position;
+                    v_normal = normalize((transpose(inverse(modelMatrix)) * vec4(normal, 1.0)).xyz);
+                    v_texCoord = uv;          
+                    vec3 pos = (modelMatrix * vec4(position, 1.0)).xyz;
+
+                    v_surfaceToLight = spotLightPosition - pos;
+
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            </script>
+              <script id="fragmentShaderPhong" type="x-shader/x-fragment">
+                uniform sampler2D u_texture; // Added for texture
+
+                // Common varyings
+                in vec3 v_position;
+                in vec3 v_normal;
+                in vec2 v_texCoord; 
+                
+                in vec3 v_surfaceToLight;
+
+                uniform vec3 light1_position;
+                uniform vec3 light1_color;
+                uniform float light1_intensity;
+                
+                uniform vec3 u_lightDirection;
+                uniform float spotLightSwitch;
+                
+                /*
+                 * Calculates the diffuse factor produced by the light illumination
+                 */
+                float diffuseFactor(vec3 normal, vec3 light_direction) {
+                float df = dot(normalize(normal), light_direction);
+
+                return max(0.0, df);
+                }
+
+                /*
+                 * The main program
+                 */
+                void main() {
+
+                    vec3 light_direction1 = normalize(light1_position - v_position);
+ 
+                    
+                    vec3 surfaceToLightDirection = normalize(v_surfaceToLight);
+                    float df2 = 0.0;
+                    float dotFromDirection = dot(surfaceToLightDirection,-u_lightDirection);
+                    if (dotFromDirection >= 0.9) {
+                        df2 = dot(v_normal, surfaceToLightDirection)*2.0*spotLightSwitch;
+                      }
+                    
+
+                    // Calculate the light diffusion factor for both lights
+                    float df1 = diffuseFactor(v_normal, light_direction1);
+
+                    // Combine diffuse contributions from both lights
+                    float totalDiffuse = df1;
+                    totalDiffuse += df2;
+                    // Sample texture
+                    vec3 textureColor = texture2D(u_texture, v_texCoord).xyz;
+
+                    // Calculate the final surface color
+                    vec3 surface_color = totalDiffuse * textureColor * light1_intensity;
+
+                    // Fragment shader output
+                    gl_FragColor = vec4(surface_color, 1.0);
+                    #include <colorspace_fragment>
+                }
+                </script>
+                
+        
+                
+                <div class="container">
+                    <div class="menu">
+                      <button id="playButton" class="btn-minecraft" >Play</button>
+                      <button id="godModeButton" class="btn-minecraft" >God Mode: Off</button>
+                      <button id="shaderButton" class="btn-minecraft" >Shader: Phong</button>
+                    </div>
+                    <div class="menu-options">
+                      <button id="soundButton" class="btn-minecraft" >Sound</button>
+                      <button id="quitButton" class="btn-minecraft" >Quit</button>
+                    </div>
+                    <div class="corner-text" id="cornerTextLeft">
+                        PLAYER MODE:<br>
+                        WASD - Character Control<br>
+                        Mouse 1 - Camera Rotate<br>
+                        F - Choose Farm Tile<br>
+                        L - Spotlight<br>
+                        <br>
+                        GOD MODE:<br>
+                        WASD - Character Control<br>
+                        Mouse 1 HOLD - Camera Rotation<br>
+                        Mouse 2 HOLD - Camera Movement<br>
+                        Mouse 1 CLICK - Choose Moveable Object<br>
+                        G - Release Choosen Object<br>
+                        Q - Translate<br>
+                        E - Rotate<br>
+                        R - Scale<br>
+                        L - Spotlight<br>
+                        </div>
+                    
+                </div>
+                <div id="alert">
+                        <button id="alertButton" onclick="closeAlert()">Close</button>
+                </div>
+                <script>
+                        function closeAlert() {
+                            document.getElementById("alert").style.display = "none";
+                        }
+                </script>
+                <div id="loading-bar-container">
+                        <div id="loading-bar">
+                                <div id="loading-text">Calculating...</div>
+                        </div>
+                </div>
+	</body>
+</html>
